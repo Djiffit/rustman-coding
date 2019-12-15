@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use bit_vec::BitVec;
+use std::fs::File;
+use std::io::prelude::*;
 
 #[derive(Debug)]
 struct Node {
@@ -38,10 +41,42 @@ impl PartialEq for Node {
     }
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let word = "       aaaaeeeefffhhiimmnnssttloprux";
 
-    huffman_encode(word.to_string());
+    // println!("{}", "00000001".as_bytes());
+
+    let codes = huffman_encode(word.to_string());
+    let bitstring = create_bistring(codes, word.to_string());
+
+    println!("{:?}", bitstring.to_bytes());
+
+    let mut file = File::create("test")?;
+    file.write_all(&bitstring.to_bytes())?;
+
+
+    let mut file = File::open("test")?;
+    let mut buffer = [0; 17];
+
+    // read up to 10 bytes
+    file.read(&mut buffer)?;
+    println!("wow {:?}", buffer);
+    Ok(())
+}
+
+fn create_bistring(codes: HashMap<char, String>, text: String) -> BitVec {
+    let new_text = text.clone().drain(..).fold("".to_string(), |prev, x| prev.clone() + (match codes.get(&x) {
+        Some(code) => code,
+        None => panic!("No code found"),
+    }));
+    let mut bit_vector = BitVec::with_capacity(new_text.len()* 2);
+    bit_vector.grow(new_text.len(), false);
+    for (i, bit) in new_text.clone().drain(..).enumerate() {
+        bit_vector.set(i, bit == '1');
+    }
+    
+    return bit_vector;
+ 
 }
 
 fn get_counts(text: String) -> (HashMap<char, f64>, f64) {
@@ -77,7 +112,7 @@ fn parse_codes(char_map: HashMap<char, f64>, curr_node: &Node, mut bin_maps: Has
 }
 
 fn huffman_encode(text: String) -> HashMap<char, String> {
-    let (counts, total) = get_counts(text);
+    let (counts, total) = get_counts(text.clone());
     let probs = get_probabilities(counts, total);
     let prob_pairs: Vec<Node> = probs.iter().map(|x| Node {prob: *x.1, val: x.0.to_string(), left: vec![], right: vec![] }).collect();
     let mut heap: BinaryHeap<Node> = BinaryHeap::new();
@@ -108,9 +143,9 @@ fn huffman_encode(text: String) -> HashMap<char, String> {
         Some(node) => node,
         None => panic!("Expected a node"),
     };
-    
-    println!("{:?} {}", parse_codes(probs.clone(), &root, HashMap::new(), "".to_string()), 1);
-    return parse_codes(probs.clone(), &root, HashMap::new(), "".to_string())
+    let codes = parse_codes(probs.clone(), &root, HashMap::new(), "".to_string());
+
+    return codes
 }
 
 #[cfg(test)]
