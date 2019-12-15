@@ -1,9 +1,45 @@
 use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+
+#[derive(Debug)]
+struct Node {
+    prob: f64,
+    val: String,
+    left: Vec<Node>,
+    right: Vec<Node>,
+}
+
+impl Ord for Node {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.prob > other.prob {
+            return Ordering::Less;
+        }
+        if self.prob < other.prob {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl PartialOrd for Node {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        return Some(self.cmp(other));
+    }
+}
+
+impl Eq for Node {
+
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool { 
+        return self.prob == other.prob;
+    }
+}
 
 fn main() {
-    let word = "abcdefg
-efg";
-
+    let word = "       aaaaeeeefffhhiimmnnssttloprux";
 
     huffman_encode(word.to_string());
 }
@@ -29,13 +65,52 @@ fn get_probabilities(counts: HashMap<char, f64>, total: f64) -> HashMap<char, f6
     return probs;
 }
 
-fn huffman_encode(text: String) {
+fn parse_codes(char_map: HashMap<char, f64>, curr_node: &Node, mut bin_maps: HashMap<char, String>, curr_word: String) -> HashMap<char, String> {
+    let curr_char = curr_node.val.clone().into_bytes()[0] as char;
+    if curr_node.val.clone().into_bytes().len() == 1 && char_map.contains_key(&curr_char) {
+        bin_maps.insert(curr_char, curr_word);
+    } else {
+        bin_maps = parse_codes(char_map.clone(), &curr_node.left[0], bin_maps.clone(), curr_word.clone() + "0");
+        bin_maps = parse_codes(char_map, &curr_node.right[0], bin_maps, curr_word.clone() + "1");
+    }
+    return bin_maps;
+}
 
+fn huffman_encode(text: String) -> HashMap<char, String> {
     let (counts, total) = get_counts(text);
     let probs = get_probabilities(counts, total);
-    let prob_pairs: Vec<(&f64, String)> = probs.iter().map(|x| (x.1, x.0.to_string())).collect();
+    let prob_pairs: Vec<Node> = probs.iter().map(|x| Node {prob: *x.1, val: x.0.to_string(), left: vec![], right: vec![] }).collect();
+    let mut heap: BinaryHeap<Node> = BinaryHeap::new();
 
-    println!("{:?} {}", prob_pairs, 1);
+    for node in prob_pairs {
+        heap.push(node);
+    }
+
+    while heap.len() > 1 {
+        let first_node = match heap.pop() {
+            Some(node) => node,
+            None => panic!("No node found!"),
+        }; 
+        let second_node = match heap.pop() {
+            Some(node) => node,
+            None => panic!("No node found!"),
+        };
+        let new_node = Node {
+            val: first_node.val.clone() + &second_node.val,
+            prob: first_node.prob + second_node.prob,
+            left: vec![first_node],
+            right: vec![second_node],
+        };
+        heap.push(new_node);
+    }
+
+    let root = match heap.pop() {
+        Some(node) => node,
+        None => panic!("Expected a node"),
+    };
+    
+    println!("{:?} {}", parse_codes(probs.clone(), &root, HashMap::new(), "".to_string()), 1);
+    return parse_codes(probs.clone(), &root, HashMap::new(), "".to_string())
 }
 
 #[cfg(test)]
@@ -49,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn run_tests() {
+    fn run_counter_tests() {
         let tests = vec![
             CountTest{
                 text: "a".to_string(),
@@ -113,5 +188,61 @@ b W cd".to_string(),
             tot_prob += count / total;
         }
         assert_eq!(tot_prob, 1.0);
+    }
+
+    struct EncodeTest {
+        word: String,
+        lengths: Vec<(char, u32)>,
+    }
+
+    #[test]
+    fn test_huffman_encoding() {
+
+        let tests = vec![
+            EncodeTest {
+                word: "       aaaaeeeefffhhiimmnnssttloprux".to_string(),
+                lengths: vec![
+                    (' ', 3),
+                    ('a', 3),
+                    ('e', 3),
+                    ('f', 4),
+                    ('h', 4),
+                    ('i', 4),
+                    ('m', 4),
+                    ('n', 4),
+                    ('s', 4),
+                    ('t', 4),
+                    ('l', 5),
+                    ('o', 5),
+                    ('p', 5),
+                    ('r', 5),
+                    ('u', 5),
+                    ('x', 5)
+                ]
+            },
+            EncodeTest {
+                word: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbccccccccccccddddddddddddddddeeeeeeeeefffff".to_string(),
+                lengths: vec![
+                    ('a', 1),
+                    ('b', 3),
+                    ('c', 3),
+                    ('d', 3),
+                    ('e', 4),
+                    ('f', 4)
+                ]
+            },
+        ];
+
+        for test in tests {
+            let code_map = huffman_encode(test.word);
+            for (c, len) in test.lengths {
+                let char_len = match code_map.get(&c) {
+                    Some(word) => word.len() as u32,
+                    _ => panic!("Expected value"),
+                };
+                assert_eq!(char_len, len);
+            }
+        }
+
     }
 }
